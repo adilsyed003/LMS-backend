@@ -27,5 +27,43 @@ model Course {
   thumbnailUrl String?
   instructor   Instructor @relation(fields: [instructorId], references: [id])
   instructorId String
+  sections     Section[]
   createdAt    DateTime   @default(now())
+}
+model Section {
+  id        String    @id @default(cuid())
+  title     String
+  course    Course    @relation(fields: [courseId], references: [id])
+  courseId  String
+  videos   Video[]
+  quizzes  Quiz[]
+  createdAt DateTime @default(now())
+}
+model Video {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  url         String   // stored in S3 or local path
+  section     Section  @relation(fields: [sectionId], references: [id])
+  sectionId   String
+}
+
+model Quiz {
+  id        String      @id @default(uuid())
+  name      String
+  section   Section     @relation(fields: [sectionId], references: [id])
+  sectionId String
+  questions Question[]
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  text      String
+  optionA   String
+  optionB   String
+  optionC   String
+  optionD   String
+  correct   String   // can store "A" | "B" | "C" | "D"
+  quiz      Quiz     @relation(fields: [quizId], references: [id])
+  quizId    String
 }
