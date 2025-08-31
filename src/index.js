@@ -1,8 +1,13 @@
+
 import express from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
+import s3 from "./aws.js";
+import multer from "multer"
 const prisma = new PrismaClient();
 const app = express();
+const upload = multer({ storage: multer.memoryStorage() });
+const bucket = s3;
 
 app.use(cors());
 app.use(express.json());
@@ -11,9 +16,9 @@ app.use(express.json());
 
 // Create Course
 app.post("/courses", async (req, res) => {
-  const { title, description, thumbnail, instructorId } = req.body;
+  const { title, description, thumbnailUrl, instructorId } = req.body;
   const course = await prisma.course.create({
-    data: { title, description, thumbnail, instructorId },
+    data: { title, description, thumbnailUrl, instructorId },
   });
   res.json(course);
 });
@@ -91,7 +96,71 @@ app.post("/api/instructors", async (req, res) => {
   }
 });
 
+app.get("/upload/thumbnail", async (req, res) => {
+  try {
+    const { fileType } = req.query;
 
+    if (fileType !== "image/png" && fileType !== "image/jpeg") {
+      return res.status(400).json({ error: "Only PNG/JPG allowed" });
+    }
+
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: `thumbnails/${Date.now()}.jpg`, // store with unique name
+      Expires: 60, // URL valid for 60 sec
+      ContentType: fileType,
+
+    };
+
+    const uploadUrl = await bucket.getSignedUrlPromise("putObject", params);
+
+    res.json({ uploadUrl, key: params.Key });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+app.get("/upload/video", async (req, res) => {
+  try {
+    const { fileType } = req.query;
+
+    if (!fileType?.startsWith("video/")) {
+      return res.status(400).json({ error: "Only video files allowed" });
+    }
+
+    const key = `videos/${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2)}.mp4`;
+
+    const uploadUrl = await s3.getSignedUrlPromise("putObject", {
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: key,
+      Expires: 60, // upload link valid 1 min
+      ContentType: fileType,
+    });
+
+    res.json({ uploadUrl, key });
+  } catch (err) {
+    console.error("Upload signed URL error:", err);
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+//see video
+app.get("/stream/video/:key", async (req, res) => {
+  try {
+    const { key } = req.params;
+
+    const signedUrl = await s3.getSignedUrlPromise("getObject", {
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: `videos/${key}`,
+      Expires: 60 * 15, // 15 min playback window
+    });
+
+    res.json({ url: signedUrl });
+  } catch (err) {
+    console.error("Stream signed URL error:", err);
+    res.status(500).json({ error: "Failed to generate stream URL" });
+  }
+});
 
 const PORT = 4000;
 app.listen(PORT, () =>
