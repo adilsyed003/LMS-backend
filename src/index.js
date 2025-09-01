@@ -16,20 +16,79 @@ app.use(express.json());
 
 // Create Course
 app.post("/courses", async (req, res) => {
-  const { title, description, thumbnailUrl, instructorId } = req.body;
-  const course = await prisma.course.create({
-    data: { title, description, thumbnailUrl, instructorId },
-  });
-  res.json(course);
+  try {
+    const { title, description, thumbnailUrl, instructorId } = req.body;
+
+    const course = await prisma.course.create({
+      data: { title, description, thumbnailUrl, instructorId },
+    });
+
+    res.json(course);
+  } catch (err) {
+    console.error("Error creating course:", err);
+    res.status(500).json({ error: "Failed to create course" });
+  }
+});
+app.get("/courses", async (req, res) => {
+  try {
+    const courses = await prisma.course.findMany({
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        thumbnailUrl: true,
+        instructorId: true,
+        createdAt: true,
+        instructor: {
+          select: {
+            name: true, // fetch only instructor's name
+          },
+        },
+      },
+    });
+    res.json(courses);
+  } catch (err) {
+    console.error("Error fetching courses:", err);
+    res.status(500).json({ error: "Failed to fetch courses" });
+  }
+});
+
+app.get("/courses/:courseId", async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const course = await prisma.course.findUnique({
+      where: { id: courseId },
+      include: {
+        sections: {
+          include: {
+            videos: true,
+            quizzes: {
+              include: { questions: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    res.json(course);
+  } catch (err) {
+    console.error("Error fetching course details:", err);
+    res.status(500).json({ error: "Failed to fetch course details" });
+  }
 });
 
 // Fetch All Courses
-app.get("/courses", async (req, res) => {
-  const courses = await prisma.course.findMany({
-    include: { sections: { include: { videos: true, quizzes: { include: { questions: true } } } } },
-  });
-  res.json(courses);
-});
+// app.get("/courses", async (req, res) => {
+//   const courses = await prisma.course.findMany({
+//     include: { sections: { include: { videos: true, quizzes: { include: { questions: true } } } } },
+//   });
+//   res.json(courses);
+// });
 
 // Add Section
 app.post("/courses/:courseId/sections", async (req, res) => {
@@ -77,7 +136,7 @@ app.post("/sections/:sectionId/quizzes", async (req, res) => {
   res.json(quiz);
 });
 app.post("/api/instructors", async (req, res) => {
-  const { email, name } = req.body;
+  const { id, email, name } = req.body;
   try {
     const existingInstructor = await prisma.instructor.findUnique({
       where: { email }
@@ -87,7 +146,7 @@ app.post("/api/instructors", async (req, res) => {
       return res.json(existingInstructor);
     }
     const instructor = await prisma.instructor.create({
-      data: { email, name }
+      data: { id, email, name }
     });
     res.json(instructor);
   } catch (err) {
